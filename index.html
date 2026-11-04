@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>星露谷 · 作物收益速算</title>
+<style>
+  :root{
+    --leaf:#3f7d58; --leaf-dark:#2c5c40; --soil:#8a6a4b;
+    --bg:#f2f4ec; --card:#fff; --line:#dfe4d6; --text:#243024; --muted:#6d7a68;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    background:var(--bg);color:var(--text);padding:28px 16px 48px;line-height:1.55;
+  }
+  .wrap{max-width:860px;margin:0 auto}
+  header{margin-bottom:20px}
+  .eyebrow{font-size:12px;letter-spacing:.16em;color:var(--leaf);font-weight:600;text-transform:uppercase}
+  h1{font-size:22px;font-weight:600;margin-top:6px}
+  .sub{font-size:13px;color:var(--muted);margin-top:6px}
+  .panel{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:20px;box-shadow:0 10px 26px -18px rgba(44,92,64,.5);
+  }
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+  button{
+    font:inherit;font-size:13px;padding:7px 14px;border-radius:9px;cursor:pointer;
+    border:1px solid var(--line);background:#fbfcf8;color:var(--text);transition:.15s;
+  }
+  button:hover{border-color:var(--leaf);color:var(--leaf)}
+  button.primary{background:var(--leaf);border-color:var(--leaf);color:#fff}
+  button.primary:hover{background:var(--leaf-dark);color:#fff}
+  .spacer{flex:1}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{
+    text-align:right;font-weight:600;font-size:11px;letter-spacing:.06em;
+    color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  th:first-child,td:first-child{text-align:left}
+  td{padding:6px;border-bottom:1px solid #f0f2ea;text-align:right;font-variant-numeric:tabular-nums}
+  td.name{text-align:left;font-weight:500;min-width:96px}
+  input[type=number],input[type=text]{
+    font:inherit;font-size:13px;width:100%;min-width:52px;
+    padding:5px 7px;border:1px solid transparent;border-radius:7px;
+    background:#fafbf6;color:var(--text);text-align:right;
+  }
+  td.name input{text-align:left}
+  input:focus{outline:none;border-color:var(--leaf);background:#fff}
+  .gold{font-weight:600;color:var(--leaf-dark)}
+  .rank{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;
+    border-radius:50%;font-size:11px;background:#eef2e6;color:var(--leaf-dark);margin-right:6px}
+  .rank.top1{background:#f7e7c3;color:#8a6a1b}
+  .del{color:#b0483c;cursor:pointer;font-size:12px;opacity:.55}
+  .del:hover{opacity:1}
+  .hint{
+    margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);
+    font-size:12px;color:var(--muted);line-height:1.7;
+  }
+  .hint b{color:var(--text)}
+  @media(max-width:640px){
+    th:nth-child(3),td:nth-child(3){display:none}
+    .panel{padding:14px 12px}
+    h1{font-size:19px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Stardew Valley · Profit</div>
+    <h1>作物每日净收益速算</h1>
+    <p class="sub">所有数值均可直接改。默认值是常见作物的参考值，以你游戏内的实际售价为准。</p>
+  </header>
+
+  <div class="panel">
+    <div class="toolbar">
+      <button class="primary" id="add">+ 添加作物</button>
+      <button id="sort">按日收益排序</button>
+      <button id="reset">恢复默认</button>
+      <div class="spacer"></div>
+      <span style="font-size:12px;color:var(--muted)" id="summary"></span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>作物</th>
+          <th>种子成本</th>
+          <th>首收天数</th>
+          <th>再收间隔</th>
+          <th>收获次数</th>
+          <th>单价</th>
+          <th>日净收益</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <div class="hint">
+      <b>算法</b>：日净收益 =（单价 × 收获次数 − 种子成本）÷ 占用天数；占用天数 = 首收天数 + 再收间隔 ×（收获次数 − 1）。<br>
+      <b>说明</b>：只种一次的（如花椰菜）把再收间隔填 0、次数填 1；无限复收作物按你计划的地块使用周期估算次数。数据存在本机浏览器，不上传。
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var KEY='stardew.crop.calc.v1';
+  var DEFAULTS=[
+    {name:'防风草',   seed:20,  first:4,  gap:0, times:1, price:35},
+    {name:'花椰菜',   seed:80,  first:12, gap:0, times:1, price:175},
+    {name:'蓝莓',     seed:80,  first:13, gap:4, times:4, price:50},
+    {name:'蔓越莓',   seed:240, first:7,  gap:5, times:5, price:75},
+    {name:'南瓜',     seed:100, first:13, gap:0, times:1, price:320},
+    {name:'杨桃',     seed:400, first:13, gap:0, times:1, price:750},
+    {name:'远古水果', seed:800, first:28, gap:7, times:8, price:550}
+  ];
+
+  var data=[];
+  try{
+    var raw=localStorage.getItem(KEY);
+    data=raw?JSON.parse(raw):JSON.parse(JSON.stringify(DEFAULTS));
+  }catch(e){data=JSON.parse(JSON.stringify(DEFAULTS))}
+
+  var tbody=document.getElementById('tbody');
+
+  function daysOf(r){return (r.first||0)+((r.gap||0)*((r.times||1)-1))}
+  function profitOf(r){
+    var d=daysOf(r);
+    if(d<=0) return 0;
+    return ((r.price||0)*(r.times||1)-(r.seed||0))/d;
+  }
+  function persist(){
+    localStorage.setItem(KEY,JSON.stringify(data));
+  }
+  function render(){
+    var rows=data.map(function(r,i){
+      return {r:r,i:i,v:profitOf(r)};
+    });
+    var order=rows.slice().sort(function(a,b){return b.v-a.v});
+    var rankMap={};
+    order.forEach(function(o,k){rankMap[o.i]=k});
+
+    tbody.innerHTML=data.map(function(r,i){
+      var p=profitOf(r), k=rankMap[i];
+      var cls=k===0?'rank top1':'rank';
+      var label=k<3?String(k+1):'';
+      return '<tr>'+
+        '<td class="name"><span class="'+cls+'">'+label+'</span><input type="text" value="'+esc(r.name)+'" data-i="'+i+'" data-f="name"></td>'+
+        '<td><input type="number" value="'+r.seed+'" data-i="'+i+'" data-f="seed" min="0"></td>'+
+        '<td><input type="number" value="'+r.first+'" data-i="'+i+'" data-f="first" min="0"></td>'+
+        '<td><input type="number" value="'+r.gap+'" data-i="'+i+'" data-f="gap" min="0"></td>'+
+        '<td><input type="number" value="'+r.times+'" data-i="'+i+'" data-f="times" min="1"></td>'+
+        '<td><input type="number" value="'+r.price+'" data-i="'+i+'" data-f="price" min="0"></td>'+
+        '<td class="gold">'+p.toFixed(2)+' g</td>'+
+        '<td><span class="del" data-del="'+i+'" title="删除">✕</span></td>'+
+      '</tr>';
+    }).join('');
+
+    var best=order[0];
+    document.getElementById('summary').textContent=
+      best&&best.v>0?('当前最优：'+data[best.i].name+'  '+best.v.toFixed(2)+' g/天'):'';
+  }
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+  tbody.addEventListener('input',function(e){
+    var el=e.target, i=el.dataset.i, f=el.dataset.f;
+    if(i===undefined||!f) return;
+    i=+i;
+    data[i][f]= f==='name'?el.value:Number(el.value||0);
+    persist();
+    var v=profitOf(data[i]);
+    el.closest('tr').querySelector('.gold').textContent=v.toFixed(2)+' g';
+    var best=data.slice().sort(function(a,b){return profitOf(b)-profitOf(a)})[0];
+    document.getElementById('summary').textContent='当前最优：'+best.name+'  '+profitOf(best).toFixed(2)+' g/天';
+  });
+
+  tbody.addEventListener('click',function(e){
+    var d=e.target.dataset.del;
+    if(d===undefined) return;
+    data.splice(+d,1);persist();render();
+  });
+
+  document.getElementById('add').addEventListener('click',function(){
+    data.push({name:'新作物',seed:0,first:7,gap:0,times:1,price:100});
+    persist();render();
+  });
+  document.getElementById('sort').addEventListener('click',function(){
+    data.sort(function(a,b){return profitOf(b)-profitOf(a)});
+    persist();render();
+  });
+  document.getElementById('reset').addEventListener('click',function(){
+    if(!confirm('恢复默认数据？你改过的数值会丢失。')) return;
+    data=JSON.parse(JSON.stringify(DEFAULTS));persist();render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
